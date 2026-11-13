@@ -231,7 +231,7 @@
     if (!r.ok) { fill(box, h('div', { class: 'msg err' }, (r.error && r.error.message) || 'Не удалось загрузить')); return; }
     const rules = r.rules || {};
     const all = r.players || [];
-    const F = { zero: false, ex: false, win: false, frozen: false, misses: new Set([2]) };
+    const F = { zero: false, ex: false, win: false, frozen: false, misses: new Set([2,3]) };
     const q = h('input', { class: 'input', type: 'search', placeholder: 'Поиск по имени', autocomplete: 'off' });
     const list = h('div', { class: 'btable' });
     const count = h('div', { class: 'hint' });
@@ -243,7 +243,7 @@
       const rows = all.filter((p) => {
         if (!F.zero && p.zero) return false;                     // нулевой баланс скрыт, пока не включён фильтр
         if (!F.frozen && p.frozen) return false;
-        if (F.misses.size && !F.misses.has(Math.min(4,Number(p.miss||0)))) return false;
+        if (F.misses.size && !F.misses.has(Number(p.miss||0))) return false;
         if (F.ex && !p.ex) return false;
         if (F.win && !(p.wins > 0)) return false;
         return !t || norm(p.name).indexOf(t) >= 0;
@@ -269,7 +269,7 @@
         h('span', { class: 'meta' }, '🎟 накоплено · 🏆 побед · 🔄 обменено · ✖ пропусков подряд')),
       q,
       h('div', { class: 'filters' }, check('zero', 'С нулевым балансом'), check('ex', 'Можно обменять ⭐'), check('win', 'Только победители')),
-      h('div',{class:'filters'},h('span',null,'Пропуски:'),...[0,1,2,3,4].map(n=>h('label',{class:'sw fl'},h('input',{type:'checkbox',checked:n===2,onchange:e=>{if(e.target.checked)F.misses.add(n);else F.misses.delete(n);draw();}}),'❌'+n)),h('label',{class:'sw fl'},h('input',{type:'checkbox',onchange:e=>{F.frozen=e.target.checked;draw();}}),'❄ Показывать замороженных')),
+      h('div',{class:'filters'},h('span',null,'Пропуски:'),...[0,1,2,3].map(n=>h('label',{class:'sw fl'},h('input',{type:'checkbox',checked:n===2||n===3||n===3,onchange:e=>{if(e.target.checked)F.misses.add(n);else F.misses.delete(n);draw();}}),'❌'+n)),h('label',{class:'sw fl'},h('input',{type:'checkbox',onchange:e=>{F.frozen=e.target.checked;draw();}}),'❄ Показывать замороженных')),
       count, list,
       rules.url ? h('a', { class: 'btn btn-primary btn-block', href: safeUrl(rules.url), target: '_blank', rel: 'noopener', style: { marginTop: '12px' } }, rules.button || 'ОБМЕНЯТЬ НА СКИДКУ') : null);
   }
@@ -282,7 +282,7 @@
     const r=await api.balances();
     if(!r.ok){fill(box,h('p',{class:'msg err'},'Ошибка загрузки'));return;}
     const players=r.players||[],rules=r.rules||{},contact=safeUrl(rules.contactUrl);
-    const q=h('input',{class:'input',type:'search',placeholder:'Имя или ссылка ВК',value:store('nomerok_vk')||''});
+    const q=h('input',{class:'input',type:'search',placeholder:'Имя или ссылка ВК',value:store('nomerok_cabinet')||store('nomerok_vk')||'',autocomplete:'off'});
     const matches=h('div');
     const select=p=>{
       store('nomerok_cabinet',p.url||p.name);
@@ -297,10 +297,10 @@
         action,h('h4',null,'🎁 Подарки'),h('div',{class:'gift-list'},(p.gifts||[]).length?(p.gifts||[]).map(g=>h('div',{class:'gift-item'},h('b',null,g.title),' · ',g.received?'✅ Получен '+(g.receivedAt||''):'📦 Ожидает выдачи')):h('p',{class:'hint'},'Подарков пока нет')),
         h('p',{class:'hint'},'Без авторизации нельзя самостоятельно менять баланс или заморозку. Для оформления заявки откроются сообщения группы ВК.'));
     };
-    const draw=()=>{const t=norm(q.value.trim());const arr=t.length>=2?players.filter(p=>norm(p.name).includes(t)||norm(p.url||'').includes(t)).slice(0,20):[];
+    const draw=()=>{const t=norm(q.value.trim()).replace(/^https?:\/\//,'').replace(/^www\./,'').replace(/^vk\.(?:com|ru)\//,'').replace(/\/$/,'');const arr=t.length>=2?players.filter(p=>norm(p.name).includes(t)||norm(p.url||'').includes(t)||norm(p.url||'').split('/').pop().includes(t)).slice(0,20):[];
       fill(matches,arr.length?arr.map(p=>h('button',{class:'btn btn-soft btn-block',style:{marginTop:'6px'},onclick:()=>select(p)},p.name+' · 🎟 '+(p.bal==null?'—':p.bal))):h('p',{class:'hint'},'Начните вводить имя или ссылку ВК.'));
     };
-    const showSearch=()=>{fill(box,h('p',{class:'lead'},'Публичные сведения. Вы можете просматривать карточки других участников.'),q,matches);draw();q.focus();};
+    const showSearch=()=>{q.value='';fill(box,h('p',{class:'lead'},'Публичные сведения. Вы можете просматривать карточки других участников.'),q,matches);draw();q.focus();};
     q.addEventListener('input',draw);
     const previous=store('nomerok_cabinet')||store('nomerok_vk');
     const known=players.find(p=>norm(p.url||'')===norm(previous||'')||norm(p.name)===norm(previous||''));
