@@ -36,7 +36,7 @@
   const layout = h('div', { class: 'layout' }, h('div', null, mineEl, gridCard), playersCard);
   const app = document.getElementById('app');
   fill(app, heroEl, bannerEl, stepsEl, layout,
-    h('div', { class: 'footer' }, 'Время указано по часовому поясу организатора. · версия сайта 5.4'));
+    h('div', { class: 'footer' }, 'Время указано по часовому поясу организатора. · версия сайта 6.1'));
   if (DEMO) document.getElementById('demo').appendChild(h('div', { class: 'demo-flag' },
     'Демо-режим: данные не сохраняются. Админка: admin.html, пароль demo. Укажите API_URL в config.js, чтобы подключить таблицу.'));
   if (window.matchMedia('(min-width: 700px)').matches) stepsEl.open = true;
@@ -74,6 +74,7 @@
     fill(heroEl, 
       h('div', { class: 'hero-top' }, h('span', { class: 'pill solid' }, 'Эфир №' + st.event.number), h('span', { class: 'pill' }, status),
         h('button', { class: 'pill admin-link', type: 'button', onclick: openBalances, title: 'Накопленные номерки и пропуски участников' }, '🎟 Балансы'),
+        h('button', { class: 'pill admin-link', type: 'button', onclick: openCabinet }, '👤 Мой кабинет'),
         h('a', { class: 'pill admin-link', href: 'admin.html', title: 'Вход для организатора' }, store('nomerok_admin_pw') ? '⚙ Админка' : '🔐 Админ')),
       h('h1', null, st.event.title || 'Прямой эфир'),
       st.event.date ? h('p', { class: 'sub' }, '📅 ' + st.event.date) : null,
@@ -230,7 +231,7 @@
     if (!r.ok) { fill(box, h('div', { class: 'msg err' }, (r.error && r.error.message) || 'Не удалось загрузить')); return; }
     const rules = r.rules || {};
     const all = r.players || [];
-    const F = { zero: false, miss: false, ex: false, win: false };
+    const F = { zero: false, miss: false, ex: false, win: false, frozen: 'all', misses: 'all' };
     const q = h('input', { class: 'input', type: 'search', placeholder: 'Поиск по имени', autocomplete: 'off' });
     const list = h('div', { class: 'btable' });
     const count = h('div', { class: 'hint' });
@@ -242,6 +243,9 @@
       const rows = all.filter((p) => {
         if (!F.zero && p.zero) return false;                     // нулевой баланс скрыт, пока не включён фильтр
         if (F.miss && !(p.miss > 0)) return false;
+        if (F.frozen === 'yes' && !p.frozen) return false;
+        if (F.frozen === 'no' && p.frozen) return false;
+        if (F.misses !== 'all' && Number(p.miss || 0) !== Number(F.misses)) return false;
         if (F.ex && !p.ex) return false;
         if (F.win && !(p.wins > 0)) return false;
         return !t || norm(p.name).indexOf(t) >= 0;
@@ -267,8 +271,36 @@
         h('span', { class: 'meta' }, '🎟 накоплено · 🏆 побед · 🔄 обменено · ✖ пропусков подряд')),
       q,
       h('div', { class: 'filters' }, check('zero', 'С нулевым балансом'), check('miss', 'Только с пропусками'), check('ex', 'Можно обменять ⭐'), check('win', 'Только победители')),
+      h('div', { class: 'filters' }, h('label', null, 'Пропуски: ', (() => { const e=h('select',{class:'input',onchange:ev=>{F.misses=ev.target.value;draw();}}, ...['all','0','1','2','3','4'].map(v=>h('option',{value:v},v==='all'?'Любое количество':v)));return e;})()),
+      h('label', null, 'Заморозка: ', h('select',{class:'input',onchange:ev=>{F.frozen=ev.target.value;draw();}}, h('option',{value:'all'},'Все'),h('option',{value:'yes'},'❄ Заморожены'),h('option',{value:'no'},'Не заморожены')))),
       count, list,
       rules.url ? h('a', { class: 'btn btn-primary btn-block', href: safeUrl(rules.url), target: '_blank', rel: 'noopener', style: { marginTop: '12px' } }, rules.button || 'ОБМЕНЯТЬ НА СКИДКУ') : null);
+  }
+
+  // Публичный кабинет БЕЗ авторизации: только те сведения, которые уже видны всем в списке балансов.
+  // Нельзя выдавать его за подтверждение владения аккаунтом или давать операции с балансом.
+  async function openCabinet() {
+    const box=h('div',null,h('p',{class:'lead'},'Загрузка открытых данных…'));
+    openModal([h('h3',null,'👤 Мой кабинет (без входа)'),box]);
+    const r=await api.balances();
+    if(!r.ok){fill(box,h('div',{class:'msg err'},'Не удалось загрузить балансы'));return;}
+    const q=h('input',{class:'input',type:'search',placeholder:'Введите имя из списка участников'});
+    const matches=h('div');
+    const select=(p)=>{
+      const rules=r.rules||{};
+      const contact=safeUrl(rules.contactUrl);
+      const min=Number(rules.freezeMinDays||1),max=Number(rules.freezeMaxDays||90);
+      fill(box,h('button',{class:'btn btn-ghost btn-sm',onclick:openCabinet},'← Выбрать другого участника'),
+        h('div',{class:'cab-profile'},avatar(p.name,p.photo,78),h('div',null,h('h3',null,p.name),h('p',{class:'meta'},'Публичная карточка · личность не подтверждена'))),
+        h('div',{class:'cab-stats'},h('div',null,'🎟 Баланс: ',h('b',null,p.bal==null?'Скрыт':p.bal)),h('div',null,'✖ Пропуски: ',h('b',null,p.miss)),h('div',null,'🏆 Победы: ',h('b',null,p.wins||0)),h('div',null,p.frozen?'❄ Заморожен':'Заморозки нет')),
+        h('p',{class:'lead'},'Заморозка доступна при балансе от 10 номерков. Срок: '+min+'–'+max+' дней. Досрочная разморозка — минус 1 номерок. Все изменения выполняет администратор.'),
+        contact?h('a',{class:'btn btn-primary btn-block',href:contact,target:'_blank',rel:'noopener noreferrer'},p.frozen?'Написать в группу для разморозки':'Запросить заморозку в сообщениях группы'):h('p',{class:'msg'},'Администратор ещё не настроил ссылку на сообщения группы.'),
+        h('p',{class:'hint'},'Вы можете бронировать номерки себе или подруге на основной странице, указав её ссылку ВК. Замороженному получателю бронь недоступна. История операций и управление балансом появятся после авторизации.'));
+    };
+    const draw=()=>{const s=norm(q.value.trim());const arr=(r.players||[]).filter(p=>s.length>=2&&norm(p.name).includes(s)).slice(0,20);
+      fill(matches,arr.length?arr.map(p=>h('button',{class:'btn btn-soft btn-block',style:{marginTop:'6px'},onclick:()=>select(p)},p.name+' · 🎟 '+(p.bal==null?'—':p.bal))):h('p',{class:'hint'},'Введите минимум две буквы имени. Данные публичные, без подтверждения личности.'));};
+    q.addEventListener('input',draw);
+    fill(box,h('p',{class:'lead'},'Найдите себя в открытом списке. Без авторизации мы не показываем закрытую историю и не разрешаем менять баланс.'),q,matches);draw();
   }
 
   function renderPlayers() {

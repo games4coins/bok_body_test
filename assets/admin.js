@@ -41,7 +41,7 @@
     detectNew(st);
     A.st = st;
     renderTop();
-    if (A.tab !== 'settings' && A.tab !== 'players') renderTab();
+    if (A.tab !== 'settings' && A.tab !== 'players' && A.tab !== 'winner') renderTab();
     const n = st.bookings.filter((b) => NEEDS_CHECK.indexOf(b.status) >= 0).length;
     document.title = (n ? '(' + n + ') ' : '') + 'Номерок — админка';
   }
@@ -135,7 +135,7 @@
     fill(topEl,
       h('a', { class: 'tab', href: 'index.html', title: 'Страница бронирования для участников' }, '← К бронированию'),
       h('span', { class: 'brand' }, 'Эфир №' + st.event.number),
-      h('div', { class: 'tabs' }, tab('queue', 'Брони', attention || ''), tab('grid', 'Сетка'), tab('players', 'Игроки'), tab('settings', 'Настройки')),
+      h('div', { class: 'tabs' }, tab('queue', 'Брони', attention || ''), tab('grid', 'Сетка'), tab('players', 'Игроки'), tab('winner', '🎉 Победитель'), tab('settings', 'Настройки')),
       h('span', { class: 'grow' }),
       h('button', { class: 'tab', title: 'Заморозить / возобновить бронирование', onclick: () => setPause(!st.paused) }, st.paused ? '▶ Возобновить' : '⏸ Перерыв'),
       h('button', { class: 'tab', title: 'Звуковой сигнал', onclick: toggleSound }, A.sound ? '🔔 Звук' : '🔕 Звук'),
@@ -170,6 +170,7 @@
     if (A.tab === 'queue') fill(contentEl, queueView());
     else if (A.tab === 'grid') fill(contentEl, gridView());
     else if (A.tab === 'players') fill(contentEl, playersView());
+    else if (A.tab === 'winner') fill(contentEl, winnerView());
     else fill(contentEl, settingsView());
     tickTimers();
   }
@@ -402,6 +403,58 @@
     vk.focus();
   }
 
+  // ───── Поздравление победителя (не изменяет итоги эфира) ─────
+  function winnerView() {
+    const number = h('input', { class: 'input', type: 'number', min: '1', max: String(A.st.ticketCount), placeholder: 'Номерок победителя' });
+    const preset = (A.st.form.find(x => x.key === 'winnerText') || {}).value || 'Поздравляем с победой! 🎉';
+    const message = h('textarea', { class: 'input', rows: '3' }); message.value = preset;
+    const preview = h('div', { class: 'winner-preview' });
+    const note = h('p', { class: 'hint' }, 'Введите подтверждённый номерок текущего эфира. Картинка не объявляет победителя автоматически и не меняет баланс.');
+    let current = null;
+    const draw = () => {
+      const n = Number(number.value);
+      const matches = A.st.bookings.filter(b => b.status === 'ПОДТВЕРЖДЕНА' && b.numbers.map(Number).includes(n));
+      if (!Number.isInteger(n) || matches.length !== 1) { current = null; fill(preview, h('p', { class: 'empty' }, 'Не найден единственный владелец подтверждённого номерка')); return; }
+      current = { ...matches[0], n };
+      const txt = message.value.replace(/\{name\}/g, current.name).replace(/\{number\}/g, String(n)).replace(/\{event\}/g, String(A.st.event.number));
+      fill(preview, h('div', { class: 'winner-stage' },
+        h('div', { class: 'winner-fireworks', 'aria-hidden': 'true' }, '🎉 ✨ 🎊 ✨ 🎉'),
+        h('div', { class: 'winner-kicker' }, 'МАСТЕРСКАЯ ВОК · ЭФИР №' + A.st.event.number),
+        avatar(current.name, current.photo, 150),
+        h('h2', null, 'ПОЗДРАВЛЯЕМ!'), h('div', { class: 'winner-name' }, current.name),
+        h('div', { class: 'winner-number' }, '№ ' + n), h('p', null, txt),
+        h('a', { href: current.vkUrl, target: '_blank', rel: 'noopener noreferrer' }, 'Профиль ВКонтакте')));
+    };
+    number.addEventListener('input', draw); message.addEventListener('input', draw);
+    const exportPng = async () => {
+      if (!current) { toast('Сначала выберите подтверждённый номерок', 'bad'); return; }
+      const c = document.createElement('canvas'); c.width = 1080; c.height = 1080;
+      const x = c.getContext('2d');
+      const g = x.createLinearGradient(0, 0, 1080, 1080); g.addColorStop(0, '#4e1748'); g.addColorStop(1, '#a33568'); x.fillStyle = g; x.fillRect(0, 0, 1080, 1080);
+      x.textAlign = 'center'; x.fillStyle = '#ffe5ac'; x.font = 'bold 36px sans-serif'; x.fillText('МАСТЕРСКАЯ ВОК · ЭФИР №' + A.st.event.number, 540, 95);
+      for(let i=0;i<65;i++){ const a=i*2.39996, r=125+((i*71)%380); x.fillStyle=['#fff0ad','#ffffff','#ffa3c9'][i%3]; x.beginPath(); x.arc(540+Math.cos(a)*r,410+Math.sin(a)*r,3+(i%4),0,Math.PI*2); x.fill(); }
+      x.fillStyle='#fff'; x.beginPath(); x.arc(540,330,145,0,Math.PI*2); x.fill();
+      let loaded=false;
+      if (current.photo && /^https:\/\//.test(current.photo)) {
+        try { const img=new Image(); img.crossOrigin='anonymous'; img.src=current.photo; await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=reject;setTimeout(()=>reject(new Error('timeout')),3500);}); x.save(); x.beginPath();x.arc(540,330,138,0,Math.PI*2);x.clip();x.drawImage(img,402,192,276,276);x.restore();loaded=true; } catch(e) {} 
+      }
+      if(!loaded){ x.fillStyle='#7e397b';x.beginPath();x.arc(540,330,138,0,Math.PI*2);x.fill();x.fillStyle='#fff';x.font='bold 140px sans-serif';x.fillText(current.name.charAt(0).toUpperCase(),540,380); }
+      x.fillStyle='#fff';x.font='bold 75px sans-serif';x.fillText('ПОЗДРАВЛЯЕМ!',540,560);
+      x.font='bold 53px sans-serif'; const nm=current.name.length>30?current.name.slice(0,29)+'…':current.name; x.fillText(nm,540,640);
+      x.fillStyle='#ffe5ac';x.font='bold 120px sans-serif';x.fillText('№ '+current.n,540,780);
+      const txt=message.value.replace(/\{name\}/g,current.name).replace(/\{number\}/g,String(current.n)).replace(/\{event\}/g,String(A.st.event.number));
+      x.fillStyle='#fff';x.font='32px sans-serif'; const words=txt.split(/\s+/);let line='',yy=860;
+      for(const word of words){const next=line?line+' '+word:word;if(x.measureText(next).width>900&&line){x.fillText(line,540,yy);yy+=43;line=word;}else line=next;if(yy>1000)break;}if(yy<=1010)x.fillText(line,540,yy);
+      const a=document.createElement('a');a.download='BOK_победитель_эфир_'+A.st.event.number+'_номер_'+current.n+'.png';a.href=c.toDataURL('image/png');a.click();
+      if(!loaded) toast('PNG создан: фото ВК не загрузилось, использована буква имени');
+    };
+    return h('section', { class:'card' },h('h2',null,'🎉 Поздравление победителя'),note,
+      h('div',{class:'field'},h('label',null,'Номерок'),number),
+      h('div',{class:'field'},h('label',null,'Текст поздравления (можно изменить для этой картинки)'),message),
+      preview,h('button',{class:'btn btn-primary btn-block',onclick:exportPng},'Сохранить открытку PNG 1080×1080'),
+      h('p',{class:'hint'},'Шаблон задаётся во вкладке «Настройки». Эффект конфетти анимирован в предпросмотре; PNG — статичная открытка. Для победителей прошедших эфиров используйте архив, здесь доступен только текущий эфир.'));
+  }
+
   // ───── Настройки ─────
   const GROUPS = [
     ['Эфир', ['eventNumber', 'eventTitle', 'eventDate', 'ticketCount', 'priceText']],
@@ -410,6 +463,7 @@
     ['Оплата и комментарий', ['payUrl', 'postUrl', 'paymentInfo']],
     ['Оплата без комиссии', ['bulkMin', 'bulkText', 'bulkButton', 'bulkUrl']],
     ['Надписи на странице бронирования', ['soldOutEnabled', 'soldOutText', 'waitText']],
+    ['Заморозка и поздравления', ['freezeMinDays', 'freezeMaxDays', 'winnerText']],
     ['Накопления и обмен', ['missLimit', 'exchangeRate', 'exchangeMin', 'exchangeButton', 'exchangeUrl', 'balanceMode', 'missNotice']],
     ['Список участников', ['nameFormat', 'showPending']],
     ['Уведомления', ['notifyEmail', 'adminUrl']]
@@ -639,17 +693,17 @@
       group('Заморозка',
         h('p', { class: 'hint' }, p.frozen
           ? (p.freezeTo ? 'Заморожен до ' + fmtDT(p.freezeTo, off()) + '. Бронировать за этого участника нельзя.' : 'Старая бессрочная заморозка. Разморозка без штрафа.')
-          : 'От 10 накопленных номерков. Срок 1–90 дней. При досрочной разморозке штраф 1 номерок.'),
+          : 'От 10 накопленных номерков. Срок задаётся в настройках. При досрочной разморозке штраф 1 номерок.'),
         ...(p.frozen ? [h('button', { class: 'btn btn-soft btn-block', onclick: () => {
           const early = !!p.freezeTo && p.freezeTo > Date.now();
           if (!window.confirm(early ? 'Досрочно разморозить и списать 1 номерок?' : 'Снять старую бессрочную заморозку без штрафа?')) return;
           doAct('adminPlayerFreeze', { frozen: false, confirmPenalty: early }, 'Разморожено');
         } }, 'Разморозить')] : [
-          h('div', { class: 'field' }, h('label', null, 'Срок заморозки, дней (1–90)'),
+          h('div', { class: 'field' }, h('label', null, 'Срок заморозки, дней (по настройкам)'),
             (() => { const inp = h('input', { class: 'input', type: 'number', min: '1', max: '90', step: '1', value: '30' });
               return h('div', null, inp, h('button', { class: 'btn btn-soft btn-block', onclick: () => {
                 const days = Number(inp.value);
-                if (!Number.isInteger(days) || days < 1 || days > 90) { toast('Укажите целое число от 1 до 90', 'bad'); return; }
+                if (!Number.isInteger(days) || days < 1 || days > 90) { toast('Укажите целое число от 1 до 90; сервер проверит действующие лимиты', 'bad'); return; }
                 if (!window.confirm('Заморозить баланс на ' + days + ' дней? Бронирование будет недоступно.')) return;
                 doAct('adminPlayerFreeze', { frozen: true, days }, 'Баланс заморожен');
               } }, '❄ Заморозить')); })())
