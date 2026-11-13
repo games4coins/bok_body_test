@@ -219,7 +219,7 @@
   function marks(p) {
     const nodes = [];
     if (p.bal !== null && p.bal !== undefined && p.bal !== 0 && p.bal !== '0') nodes.push(h('span', { class: 'bal', title: 'Накопленные номерки' }, '🎟 ' + p.bal));
-    if (p.frozen) nodes.push(h('span', { class: 'frz', title: 'Баланс заморожен: пропуски не считаются' }, '❄'));
+    if (p.frozen) nodes.push(h('span', { class: 'frz snow-big', title: 'Баланс заморожен: пропуски не считаются' }, '❄'));
     if (p.miss > 0) nodes.push(h('span', { class: 'xs', title: 'Пропусков подряд: ' + p.miss, 'aria-label': 'Пропусков подряд: ' + p.miss }, '✖'.repeat(p.miss)));
     return nodes.length ? h('span', { class: 'marks' }, nodes) : null;
   }
@@ -231,7 +231,7 @@
     if (!r.ok) { fill(box, h('div', { class: 'msg err' }, (r.error && r.error.message) || 'Не удалось загрузить')); return; }
     const rules = r.rules || {};
     const all = r.players || [];
-    const F = { zero: false, miss: false, ex: false, win: false, frozen: 'all', misses: 'all' };
+    const F = { zero: false, ex: false, win: false, frozen: false, misses: new Set([2]) };
     const q = h('input', { class: 'input', type: 'search', placeholder: 'Поиск по имени', autocomplete: 'off' });
     const list = h('div', { class: 'btable' });
     const count = h('div', { class: 'hint' });
@@ -242,10 +242,8 @@
       const t = norm(q.value.trim());
       const rows = all.filter((p) => {
         if (!F.zero && p.zero) return false;                     // нулевой баланс скрыт, пока не включён фильтр
-        if (F.miss && !(p.miss > 0)) return false;
-        if (F.frozen === 'yes' && !p.frozen) return false;
-        if (F.frozen === 'no' && p.frozen) return false;
-        if (F.misses !== 'all' && Number(p.miss || 0) !== Number(F.misses)) return false;
+        if (!F.frozen && p.frozen) return false;
+        if (F.misses.size && !F.misses.has(Math.min(4,Number(p.miss||0)))) return false;
         if (F.ex && !p.ex) return false;
         if (F.win && !(p.wins > 0)) return false;
         return !t || norm(p.name).indexOf(t) >= 0;
@@ -254,12 +252,12 @@
       fill(list,
         h('div', { class: 'brow bhead' }, h('span', null, 'Участник'), h('span', { class: 'n', title: 'Накопленные номерки' }, '🎟'),
           h('span', { class: 'n', title: 'Победы' }, '🏆'), h('span', { class: 'n', title: 'Обменено номерков за всё время' }, '🔄'),
-          h('span', { class: 'n', title: 'Пропуски эфиров подряд' }, '✖')),
+          h('span', { class: 'n', title: 'Пропуски эфиров подряд' }, '✖'),h('span',{class:'n'},'❄')),
         rows.length ? rows.map((p) => h('div', { class: 'brow' + (p.ex ? ' ready' : '') },
           h('span', { class: 'bn' }, avatar(p.name, p.photo, 22), h('b', null, p.name), p.frozen ? h('span', { class: 'frz', title: 'Баланс заморожен' }, '❄') : null,
             p.ex ? h('span', { class: 'star', title: 'Можно обменять' + (p.worth ? ' на ' + p.worth + ' ₽' : '') }, '⭐') : null),
           num(p.bal, p.ex ? 'bal' : ''), num(p.wins || 0), num(p.exch || 0),
-          h('span', { class: 'n' }, p.miss > 0 ? h('span', { class: 'xs' }, '✖'.repeat(p.miss)) : '·')))
+          h('span', { class: 'n' }, p.miss > 0 ? h('span', { class: 'xs' }, '✖'.repeat(p.miss)) : '·'), h('span',{class:'n freeze-days'},p.frozen?(p.freezeTo?Math.max(0,Math.ceil((p.freezeTo-Date.now())/86400000))+' дн.':'∞'):'—')))
           : h('div', { class: 'empty' }, all.length ? 'Никого не нашли — попробуйте изменить фильтры' : 'Пока нет данных'));
     }
     q.addEventListener('input', draw);
@@ -270,9 +268,8 @@
         rules.exchangeMin ? 'От ' + rules.exchangeMin + ' номерков можно обменять на скидку' + (rules.rate ? ' (1 номерок = ' + rules.rate + ' ₽)' : '') + '. ' : '',
         h('span', { class: 'meta' }, '🎟 накоплено · 🏆 побед · 🔄 обменено · ✖ пропусков подряд')),
       q,
-      h('div', { class: 'filters' }, check('zero', 'С нулевым балансом'), check('miss', 'Только с пропусками'), check('ex', 'Можно обменять ⭐'), check('win', 'Только победители')),
-      h('div', { class: 'filters' }, h('label', null, 'Пропуски: ', (() => { const e=h('select',{class:'input',onchange:ev=>{F.misses=ev.target.value;draw();}}, ...['all','0','1','2','3','4'].map(v=>h('option',{value:v},v==='all'?'Любое количество':v)));return e;})()),
-      h('label', null, 'Заморозка: ', h('select',{class:'input',onchange:ev=>{F.frozen=ev.target.value;draw();}}, h('option',{value:'all'},'Все'),h('option',{value:'yes'},'❄ Заморожены'),h('option',{value:'no'},'Не заморожены')))),
+      h('div', { class: 'filters' }, check('zero', 'С нулевым балансом'), check('ex', 'Можно обменять ⭐'), check('win', 'Только победители')),
+      h('div',{class:'filters'},h('span',null,'Пропуски:'),...[0,1,2,3,4].map(n=>h('label',{class:'sw fl'},h('input',{type:'checkbox',checked:n===2,onchange:e=>{if(e.target.checked)F.misses.add(n);else F.misses.delete(n);draw();}}),'❌'+n)),h('label',{class:'sw fl'},h('input',{type:'checkbox',onchange:e=>{F.frozen=e.target.checked;draw();}}),'❄ Показывать замороженных')),
       count, list,
       rules.url ? h('a', { class: 'btn btn-primary btn-block', href: safeUrl(rules.url), target: '_blank', rel: 'noopener', style: { marginTop: '12px' } }, rules.button || 'ОБМЕНЯТЬ НА СКИДКУ') : null);
   }
@@ -280,27 +277,34 @@
   // Публичный кабинет БЕЗ авторизации: только те сведения, которые уже видны всем в списке балансов.
   // Нельзя выдавать его за подтверждение владения аккаунтом или давать операции с балансом.
   async function openCabinet() {
-    const box=h('div',null,h('p',{class:'lead'},'Загрузка открытых данных…'));
-    openModal([h('h3',null,'👤 Мой кабинет (без входа)'),box]);
+    const box=h('div',null,h('p',{class:'lead'},'Загружаем публичные данные…'));
+    openModal([h('h3',null,'👤 Кабинет участника (без авторизации)'),box]);
     const r=await api.balances();
-    if(!r.ok){fill(box,h('div',{class:'msg err'},'Не удалось загрузить балансы'));return;}
-    const q=h('input',{class:'input',type:'search',placeholder:'Введите имя из списка участников'});
+    if(!r.ok){fill(box,h('p',{class:'msg err'},'Ошибка загрузки'));return;}
+    const players=r.players||[],rules=r.rules||{},contact=safeUrl(rules.contactUrl);
+    const q=h('input',{class:'input',type:'search',placeholder:'Имя или ссылка ВК',value:store('nomerok_vk')||''});
     const matches=h('div');
-    const select=(p)=>{
-      const rules=r.rules||{};
-      const contact=safeUrl(rules.contactUrl);
-      const min=Number(rules.freezeMinDays||1),max=Number(rules.freezeMaxDays||90);
-      fill(box,h('button',{class:'btn btn-ghost btn-sm',onclick:openCabinet},'← Выбрать другого участника'),
-        h('div',{class:'cab-profile'},avatar(p.name,p.photo,78),h('div',null,h('h3',null,p.name),h('p',{class:'meta'},'Публичная карточка · личность не подтверждена'))),
-        h('div',{class:'cab-stats'},h('div',null,'🎟 Баланс: ',h('b',null,p.bal==null?'Скрыт':p.bal)),h('div',null,'✖ Пропуски: ',h('b',null,p.miss)),h('div',null,'🏆 Победы: ',h('b',null,p.wins||0)),h('div',null,p.frozen?'❄ Заморожен':'Заморозки нет')),
-        h('p',{class:'lead'},'Заморозка доступна при балансе от 10 номерков. Срок: '+min+'–'+max+' дней. Досрочная разморозка — минус 1 номерок. Все изменения выполняет администратор.'),
-        contact?h('a',{class:'btn btn-primary btn-block',href:contact,target:'_blank',rel:'noopener noreferrer'},p.frozen?'Написать в группу для разморозки':'Запросить заморозку в сообщениях группы'):h('p',{class:'msg'},'Администратор ещё не настроил ссылку на сообщения группы.'),
-        h('p',{class:'hint'},'Вы можете бронировать номерки себе или подруге на основной странице, указав её ссылку ВК. Замороженному получателю бронь недоступна. История операций и управление балансом появятся после авторизации.'));
+    const select=p=>{
+      store('nomerok_cabinet',p.url||p.name);
+      const left=p.freezeTo?Math.max(0,Math.ceil((p.freezeTo-Date.now())/86400000)):null;
+      const eligible=typeof p.bal==='number'&&p.bal>=10;
+      const buttonText=p.frozen?'Запросить досрочную разморозку (−1 номерок)':'Запросить заморозку';
+      const action=contact&&((p.frozen)||eligible)?h('a',{class:'btn btn-primary btn-block',href:contact,target:'_blank',rel:'noopener noreferrer'},buttonText):h('button',{class:'btn btn-soft btn-block',disabled:true,title:'Для заморозки требуется баланс не менее 10 номерков'},'Заморозка доступна от 10 номерков');
+      fill(box,h('button',{class:'btn btn-ghost btn-sm',onclick:()=>showSearch()},'← Сменить участника'),
+        h('div',{class:'cab-profile'},avatar(p.name,p.photo,112),h('div',null,h('h3',{class:p.frozen?'frozen-name':''},p.name),h('p',{class:'meta'},'Публичная карточка · личность не подтверждена'))),
+        h('div',{class:'cab-stats'},h('div',null,'🎟 Баланс: ',h('b',null,p.bal==null?'Скрыт':p.bal)),h('div',null,'❌ Пропуски: ',h('b',null,p.miss)),h('div',null,'🏆 Победы: ',h('b',null,p.wins||0)),h('div',null,p.frozen?'❄ Заморожен':'Активен')),
+        p.frozen?h('p',{class:'msg'},left===null?'❄ Бессрочная заморозка по старым правилам':'❄ До бесплатной разморозки осталось '+left+' дн.'):h('p',{class:'hint'},'Доступная заморозка: '+(rules.freezeMinDays||1)+'–'+(rules.freezeMaxDays||90)+' дней. Запрос обрабатывает администратор.'),
+        action,h('h4',null,'🎁 Подарки'),h('div',{class:'gift-list'},(p.gifts||[]).length?(p.gifts||[]).map(g=>h('div',{class:'gift-item'},h('b',null,g.title),' · ',g.received?'✅ Получен '+(g.receivedAt||''):'📦 Ожидает выдачи')):h('p',{class:'hint'},'Подарков пока нет')),
+        h('p',{class:'hint'},'Без авторизации нельзя самостоятельно менять баланс или заморозку. Для оформления заявки откроются сообщения группы ВК.'));
     };
-    const draw=()=>{const s=norm(q.value.trim());const arr=(r.players||[]).filter(p=>s.length>=2&&norm(p.name).includes(s)).slice(0,20);
-      fill(matches,arr.length?arr.map(p=>h('button',{class:'btn btn-soft btn-block',style:{marginTop:'6px'},onclick:()=>select(p)},p.name+' · 🎟 '+(p.bal==null?'—':p.bal))):h('p',{class:'hint'},'Введите минимум две буквы имени. Данные публичные, без подтверждения личности.'));};
+    const draw=()=>{const t=norm(q.value.trim());const arr=t.length>=2?players.filter(p=>norm(p.name).includes(t)||norm(p.url||'').includes(t)).slice(0,20):[];
+      fill(matches,arr.length?arr.map(p=>h('button',{class:'btn btn-soft btn-block',style:{marginTop:'6px'},onclick:()=>select(p)},p.name+' · 🎟 '+(p.bal==null?'—':p.bal))):h('p',{class:'hint'},'Начните вводить имя или ссылку ВК.'));
+    };
+    const showSearch=()=>{fill(box,h('p',{class:'lead'},'Публичные сведения. Вы можете просматривать карточки других участников.'),q,matches);draw();q.focus();};
     q.addEventListener('input',draw);
-    fill(box,h('p',{class:'lead'},'Найдите себя в открытом списке. Без авторизации мы не показываем закрытую историю и не разрешаем менять баланс.'),q,matches);draw();
+    const previous=store('nomerok_cabinet')||store('nomerok_vk');
+    const known=players.find(p=>norm(p.url||'')===norm(previous||'')||norm(p.name)===norm(previous||''));
+    if(known)select(known);else showSearch();
   }
 
   function renderPlayers() {
@@ -508,6 +512,13 @@
         preview.className = 'msg err'; preview.textContent = r.error.message;
       }
     }
+    const suggestions=h('div',{class:'live-suggestions'});let directory=[];
+    api.players().then(r=>{if(r.ok)directory=r.players||[];});
+    const suggest=()=>{const t=norm(vkInput.value.trim());if(t.length<2){fill(suggestions);return;}
+      const rows=directory.filter(p=>norm(p.name).includes(t)).slice(0,8);
+      fill(suggestions,rows.map(p=>h('button',{type:'button',class:'btn btn-soft btn-block',onclick:()=>{choose(p);fill(suggestions);}},avatar(p.name,p.photo,28),' ',p.name)));
+    };
+    vkInput.addEventListener('input',suggest);
     vkInput.addEventListener('change', resolve);
     vkInput.addEventListener('input', () => { chosen = null; });
 
@@ -535,7 +546,7 @@
       h('h3', null, 'Бронь номерков'),
       h('p', { class: 'lead' }, list(nums) + ' · ' + nums.length + ' шт. · ' + S.st.price + ' за номерок'),
       h('div', { class: 'field' },
-        h('label', null, 'Ссылка на ваш профиль ВКонтакте'), vkInput, h('div', { style: { margin: '8px 0' } }, pickBtn), pickEl,
+        h('label', null, 'Ссылка на ваш профиль ВКонтакте'), vkInput, suggestions, h('div', { style: { margin: '8px 0' } }, pickBtn), pickEl,
         h('div', { class: 'hint' }, 'Нужна, чтобы мы вас узнали. В списке участников будут видны имя и фото из вашего профиля.'), preview),
       nameField, errBox, submit
     ]);

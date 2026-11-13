@@ -41,7 +41,7 @@
     detectNew(st);
     A.st = st;
     renderTop();
-    if (A.tab !== 'settings' && A.tab !== 'players' && A.tab !== 'winner') renderTab();
+    if (A.tab !== 'settings' && A.tab !== 'players' && A.tab !== 'winner' && A.tab !== 'gifts') renderTab();
     const n = st.bookings.filter((b) => NEEDS_CHECK.indexOf(b.status) >= 0).length;
     document.title = (n ? '(' + n + ') ' : '') + 'Номерок — админка';
   }
@@ -135,7 +135,7 @@
     fill(topEl,
       h('a', { class: 'tab', href: 'index.html', title: 'Страница бронирования для участников' }, '← К бронированию'),
       h('span', { class: 'brand' }, 'Эфир №' + st.event.number),
-      h('div', { class: 'tabs' }, tab('queue', 'Брони', attention || ''), tab('grid', 'Сетка'), tab('players', 'Игроки'), tab('winner', '🎉 Победитель'), tab('settings', 'Настройки')),
+      h('div', { class: 'tabs' }, tab('queue', 'Брони', attention || ''), tab('grid', 'Сетка'), tab('players', 'Игроки'), tab('gifts', '🎁 Подарки'), tab('winner', '🎉 Победитель'), tab('settings', 'Настройки')),
       h('span', { class: 'grow' }),
       h('button', { class: 'tab', title: 'Заморозить / возобновить бронирование', onclick: () => setPause(!st.paused) }, st.paused ? '▶ Возобновить' : '⏸ Перерыв'),
       h('button', { class: 'tab', title: 'Звуковой сигнал', onclick: toggleSound }, A.sound ? '🔔 Звук' : '🔕 Звук'),
@@ -171,6 +171,7 @@
     else if (A.tab === 'grid') fill(contentEl, gridView());
     else if (A.tab === 'players') fill(contentEl, playersView());
     else if (A.tab === 'winner') fill(contentEl, winnerView());
+    else if (A.tab === 'gifts') fill(contentEl, giftsView());
     else fill(contentEl, settingsView());
     tickTimers();
   }
@@ -382,6 +383,8 @@
     }
     const schedule = () => { chosen = null; clearTimeout(timer); timer = setTimeout(resolve, 600); };
     vk.addEventListener('change', () => { if (!chosen) resolve(); });
+    const live=h('div',{class:'live-suggestions'});
+    vk.addEventListener('input',async()=>{if(!A.players){const r=await act('adminPlayers');if(r){A.players=r.players;A.rules=r.rules;}}const t=norm(vk.value.trim());fill(live,t.length<2?null:(A.players||[]).filter(p=>norm(p.name).includes(t)||norm(p.url).includes(t)).slice(0,8).map(p=>h('button',{class:'btn btn-soft btn-block',onclick:()=>{choose(p);fill(live);}},p.name)));});
     vk.addEventListener('input', schedule);
     vk.addEventListener('paste', schedule);
 
@@ -395,7 +398,7 @@
       setState(r); A.sel.clear(); closeModal(); renderTab(); toast('Забронировано: ' + list(nums));
     } }, 'Забронировать ' + list(nums));
     openModal([h('h3', null, 'Ручная бронь'),
-      h('div', { class: 'field' }, h('label', null, 'Ссылка на профиль ВК'), vk, h('div', { style: { margin: '8px 0' } }, pickBtn), pickEl, preview,
+      h('div', { class: 'field' }, h('label', null, 'Ссылка на профиль ВК'), vk, live, h('div', { style: { margin: '8px 0' } }, pickBtn), pickEl, preview,
         h('div', { class: 'hint' }, 'С ссылкой имя вводить не обязательно: имя и фото подтянутся из ВК.')),
       h('div', { class: 'field' }, h('label', null, 'Имя'), name),
       h('div', { class: 'field' }, h('label', null, 'Режим'), mode),
@@ -405,69 +408,51 @@
 
   // ───── Поздравление победителя (не изменяет итоги эфира) ─────
   function winnerView() {
-    const number = h('input', { class: 'input', type: 'number', min: '1', max: String(A.st.ticketCount), placeholder: 'Номерок победителя' });
-    const preset = (A.st.form.find(x => x.key === 'winnerText') || {}).value || 'Поздравляем с победой! 🎉';
-    const message = h('textarea', { class: 'input', rows: '3' }); message.value = preset;
-    const preview = h('div', { class: 'winner-preview' });
-    const note = h('p', { class: 'hint' }, 'Введите подтверждённый номерок текущего эфира. Картинка не объявляет победителя автоматически и не меняет баланс.');
-    let current = null;
-    const draw = () => {
-      const n = Number(number.value);
-      const matches = A.st.bookings.filter(b => b.status === 'ПОДТВЕРЖДЕНА' && b.numbers.map(Number).includes(n));
-      if (!Number.isInteger(n) || matches.length !== 1) { current = null; fill(preview, h('p', { class: 'empty' }, 'Не найден единственный владелец подтверждённого номерка')); return; }
-      current = { ...matches[0], n };
-      const txt = message.value.replace(/\{name\}/g, current.name).replace(/\{number\}/g, String(n)).replace(/\{event\}/g, String(A.st.event.number));
-      fill(preview, h('div', { class: 'winner-stage' },
-        h('div', { class: 'winner-fireworks', 'aria-hidden': 'true' }, '🎉 ✨ 🎊 ✨ 🎉'),
-        h('div', { class: 'winner-kicker' }, 'МАСТЕРСКАЯ ВОК · ЭФИР №' + A.st.event.number),
-        avatar(current.name, current.photo, 150),
-        h('h2', null, 'ПОЗДРАВЛЯЕМ!'), h('div', { class: 'winner-name' }, current.name),
-        h('div', { class: 'winner-number' }, '№ ' + n), h('p', null, txt),
-        h('a', { href: current.vkUrl, target: '_blank', rel: 'noopener noreferrer' }, 'Профиль ВКонтакте')));
+    const number=h('input',{class:'input',type:'number',min:'1',max:String(A.st.ticketCount),placeholder:'Номерок победителя'});
+    const preset=(A.st.form.find(x=>x.key==='winnerText')||{}).value||'Поздравляем с победой! 🎉';
+    const message=h('textarea',{class:'input',rows:'3',value:preset});message.value=preset;
+    const prize=h('input',{class:'input',type:'number',min:'0',step:'100',value:'12000'});
+    const preview=h('div',{class:'winner-preview'}),copyPreview=h('div',{class:'winner-copy-preview'});let current=null;
+    const postText=()=>{
+      if(!current)return '';
+      const link=String(current.vkUrl||'').trim(),name=current.name||'Победитель';
+      const tagged=/^https:\/\/(?:www\.)?(?:vk\.com|vk\.ru)\/[a-zA-Z0-9_.-]+\/?$/.test(link)?'['+link+'|'+name+']':name;
+      return '💥Сегодня в '+A.st.event.number+'-м эфире '+tagged+' с номерком №'+current.n+' забирает шарнирное тело стоимостью до '+Number(prize.value||0).toLocaleString('ru-RU')+' руб. включительно, либо может доплатить разницу до более дорогого тела или комплектации.';
     };
-    number.addEventListener('input', draw); message.addEventListener('input', draw);
-    const exportPng = async () => {
-      if (!current) { toast('Сначала выберите подтверждённый номерок', 'bad'); return; }
-      const c = document.createElement('canvas'); c.width = 1080; c.height = 1080;
-      const x = c.getContext('2d');
-      const g = x.createLinearGradient(0, 0, 1080, 1080); g.addColorStop(0, '#4e1748'); g.addColorStop(1, '#a33568'); x.fillStyle = g; x.fillRect(0, 0, 1080, 1080);
-      x.textAlign = 'center'; x.fillStyle = '#ffe5ac'; x.font = 'bold 36px sans-serif'; x.fillText('МАСТЕРСКАЯ ВОК · ЭФИР №' + A.st.event.number, 540, 95);
-      for(let i=0;i<65;i++){ const a=i*2.39996, r=125+((i*71)%380); x.fillStyle=['#fff0ad','#ffffff','#ffa3c9'][i%3]; x.beginPath(); x.arc(540+Math.cos(a)*r,410+Math.sin(a)*r,3+(i%4),0,Math.PI*2); x.fill(); }
-      x.fillStyle='#fff'; x.beginPath(); x.arc(540,330,145,0,Math.PI*2); x.fill();
-      let loaded=false;
-      if (current.photo && /^https:\/\//.test(current.photo)) {
-        try { const img=new Image(); img.crossOrigin='anonymous'; img.src=current.photo; await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=reject;setTimeout(()=>reject(new Error('timeout')),3500);}); x.save(); x.beginPath();x.arc(540,330,138,0,Math.PI*2);x.clip();x.drawImage(img,402,192,276,276);x.restore();loaded=true; } catch(e) {} 
-      }
-      if(!loaded){ x.fillStyle='#7e397b';x.beginPath();x.arc(540,330,138,0,Math.PI*2);x.fill();x.fillStyle='#fff';x.font='bold 140px sans-serif';x.fillText(current.name.charAt(0).toUpperCase(),540,380); }
-      x.fillStyle='#fff';x.font='bold 75px sans-serif';x.fillText('ПОЗДРАВЛЯЕМ!',540,560);
-      x.font='bold 53px sans-serif'; const nm=current.name.length>30?current.name.slice(0,29)+'…':current.name; x.fillText(nm,540,640);
-      x.fillStyle='#ffe5ac';x.font='bold 120px sans-serif';x.fillText('№ '+current.n,540,780);
+    const draw=()=>{
+      const n=Number(number.value),matches=A.st.bookings.filter(b=>b.status==='ПОДТВЕРЖДЕНА'&&b.numbers.map(Number).includes(n));
+      if(!Number.isInteger(n)||matches.length!==1){current=null;fill(preview,h('p',{class:'empty'},'Выберите подтверждённый номерок'));fill(copyPreview);return;}
+      current={...matches[0],n};const txt=message.value.replace(/\{name\}/g,current.name).replace(/\{number\}/g,String(n)).replace(/\{event\}/g,String(A.st.event.number));
+      fill(preview,h('div',{class:'winner-stage'},h('div',{class:'winner-sparks','aria-hidden':'true'},'✦  ✧  ✦  ✧  ✦'),h('div',{class:'winner-brand'},'ВОК',h('small',null,'МАСТЕРСКАЯ ШАРНИРНЫХ ТЕЛ')),
+        h('div',{class:'winner-heading'},'ПОЗДРАВЛЯЕМ',h('em',null,'победителя!')),
+        h('div',{class:'winner-portrait'},avatar(current.name,current.photo,280)),h('div',{class:'winner-event'},'ЭФИР № '+A.st.event.number),
+        h('div',{class:'winner-name'},current.name),h('div',{class:'winner-number'},'№ '+n),h('div',{class:'winner-prize'},'ШАРНИРНОЕ ТЕЛО · ДО '+Number(prize.value||0).toLocaleString('ru-RU')+' ₽'),h('p',null,txt)));
+      fill(copyPreview,h('p',{class:'hint'},postText()));
+    };
+    number.addEventListener('input',draw);message.addEventListener('input',draw);prize.addEventListener('input',draw);
+    const exportPng=async()=>{
+      if(!current){toast('Сначала выберите номерок','bad');return;}
+      const c=document.createElement('canvas');c.width=1080;c.height=1350;const x=c.getContext('2d');
+      const g=x.createRadialGradient(540,510,60,540,680,950);g.addColorStop(0,'#8c3657');g.addColorStop(.55,'#501e38');g.addColorStop(1,'#230f20');x.fillStyle=g;x.fillRect(0,0,1080,1350);
+      x.strokeStyle='#d7a65b';x.lineWidth=4;x.strokeRect(28,28,1024,1294);x.strokeStyle='#9e6a50';x.lineWidth=1;x.strokeRect(43,43,994,1264);
+      for(let i=0;i<90;i++){let a=i*2.39996,r=120+(i*71)%620;x.fillStyle=['#f8db9b','#e3a7ad','#fff3d7'][i%3];x.globalAlpha=.45+(i%4)*.12;x.beginPath();x.arc(540+Math.cos(a)*r,650+Math.sin(a)*r,2+i%4,0,Math.PI*2);x.fill();}x.globalAlpha=1;
+      const line=(t,y,font,color)=>{x.font=font;x.fillStyle=color;x.textAlign='center';x.fillText(t,540,y,970);};
+      line('В О К',116,'58px Georgia, serif','#f7d8a1');line('МАСТЕРСКАЯ ШАРНИРНЫХ ТЕЛ',155,'20px sans-serif','#e8c391');
+      line('ПОЗДРАВЛЯЕМ',258,'100px Georgia, serif','#f9dca6');line('победителя!',324,'italic 72px Georgia, serif','#f5c987');
+      x.beginPath();x.arc(540,585,218,0,Math.PI*2);x.fillStyle='#d9b16d';x.fill();
+      let loaded=false;if(current.photo&&/^https:\/\//.test(current.photo))try{const img=new Image();img.crossOrigin='anonymous';img.src=current.photo;await new Promise((res,rej)=>{img.onload=res;img.onerror=rej;setTimeout(()=>rej(Error('timeout')),4500);});x.save();x.beginPath();x.arc(540,585,207,0,Math.PI*2);x.clip();let scale=Math.max(414/img.width,414/img.height),w=img.width*scale,h=img.height*scale;x.drawImage(img,540-w/2,585-h/2,w,h);x.restore();loaded=true;}catch(e){}
+      if(!loaded){x.fillStyle='#71334f';x.beginPath();x.arc(540,585,207,0,Math.PI*2);x.fill();line(current.name.slice(0,1).toUpperCase(),635,'bold 170px Georgia, serif','#f7d8a1');}
+      line('ЭФИР № '+A.st.event.number,852,'28px sans-serif','#f7d8a1');line(current.name,941,'bold 70px Georgia, serif','#fff3df');line('№ '+current.n,1072,'bold 130px Georgia, serif','#f7d8a1');
+      line('ШАРНИРНОЕ ТЕЛО · ДО '+Number(prize.value||0).toLocaleString('ru-RU')+' ₽',1160,'bold 32px sans-serif','#fff1db');
       const txt=message.value.replace(/\{name\}/g,current.name).replace(/\{number\}/g,String(current.n)).replace(/\{event\}/g,String(A.st.event.number));
-      x.fillStyle='#fff';x.font='32px sans-serif'; const words=txt.split(/\s+/);let line='',yy=860;
-      for(const word of words){const next=line?line+' '+word:word;if(x.measureText(next).width>900&&line){x.fillText(line,540,yy);yy+=43;line=word;}else line=next;if(yy>1000)break;}if(yy<=1010)x.fillText(line,540,yy);
-      const a=document.createElement('a');a.download='BOK_победитель_эфир_'+A.st.event.number+'_номер_'+current.n+'.png';a.href=c.toDataURL('image/png');a.click();
-      if(!loaded) toast('PNG создан: фото ВК не загрузилось, использована буква имени');
+      x.font='25px sans-serif';const words=txt.split(/\s+/);let lines=[],l='';for(const w of words){const test=l?l+' '+w:w;if(x.measureText(test).width>850&&l){lines.push(l);l=w;}else l=test;}if(l)lines.push(l);lines.slice(0,3).forEach((t,i)=>line(t,1220+i*30,'25px sans-serif','#fff1db'));
+      const a=document.createElement('a');a.download='BOK_победитель_'+A.st.event.number+'_'+current.n+'.png';a.href=c.toDataURL('image/png');a.click();if(!loaded)toast('Фото недоступно для экспорта — использована буква имени');
     };
-    return h('section', { class:'card' },h('h2',null,'🎉 Поздравление победителя'),note,
-      h('div',{class:'field'},h('label',null,'Номерок'),number),
-      h('div',{class:'field'},h('label',null,'Текст поздравления (можно изменить для этой картинки)'),message),
-      preview,h('button',{class:'btn btn-primary btn-block',onclick:exportPng},'Сохранить открытку PNG 1080×1080'),
-      h('p',{class:'hint'},'Шаблон задаётся во вкладке «Настройки». Эффект конфетти анимирован в предпросмотре; PNG — статичная открытка. Для победителей прошедших эфиров используйте архив, здесь доступен только текущий эфир.'));
+    return h('section',{class:'card'},h('h2',null,'🎉 Поздравление победителя'),h('p',{class:'hint'},'Номерок из подтверждённой брони. Картинка не меняет итоги эфира.'),
+      h('div',{class:'field'},h('label',null,'Номерок победителя'),number),h('div',{class:'field'},h('label',null,'Стоимость подарка, ₽'),prize),h('div',{class:'field'},h('label',null,'Текст на открытке'),message),preview,
+      h('button',{class:'btn btn-primary btn-block',onclick:exportPng},'Сохранить премиальную открытку PNG 1080×1350'),
+      h('h3',null,'Текст для поста ВК'),copyPreview,h('button',{class:'btn btn-soft btn-block',onclick:()=>{if(!current){toast('Выберите номерок','bad');return;}copyText(postText());toast('Текст скопирован');}},'📋 Скопировать поздравление'));
   }
-
-  // ───── Настройки ─────
-  const GROUPS = [
-    ['Эфир', ['eventNumber', 'eventTitle', 'eventDate', 'ticketCount', 'priceText']],
-    ['Бронирование', ['confirmHours', 'maxPending', 'maxConfirmed', 'quietEnabled', 'quietFrom', 'quietTo', 'utcOffset', 'bookingOpen']],
-    ['Технический перерыв', ['paused', 'pauseMessage']],
-    ['Оплата и комментарий', ['payUrl', 'postUrl', 'paymentInfo']],
-    ['Оплата без комиссии', ['bulkMin', 'bulkText', 'bulkButton', 'bulkUrl']],
-    ['Надписи на странице бронирования', ['soldOutEnabled', 'soldOutText', 'waitText']],
-    ['Заморозка и поздравления', ['freezeMinDays', 'freezeMaxDays', 'winnerText']],
-    ['Накопления и обмен', ['missLimit', 'exchangeRate', 'exchangeMin', 'exchangeButton', 'exchangeUrl', 'balanceMode', 'missNotice']],
-    ['Список участников', ['nameFormat', 'showPending']],
-    ['Уведомления', ['notifyEmail', 'adminUrl']]
-  ];
 
   function settingsView() {
     const byKey = {};
@@ -600,6 +585,21 @@
   const adoptPlayers = (r) => { A.players = r.players; A.rules = r.rules; };
   const crosses = (n) => (n > 0 ? h('span', { class: 'xs', title: 'Пропусков подряд: ' + n }, '✖'.repeat(n)) : null);
 
+  function giftsView() {
+    const body=h('div',null,h('p',{class:'lead'},'Загружаем подарки…'));
+    const refresh=async()=>{const r=await act('adminGifts');if(!r)return;
+      fill(body,(r.gifts||[]).length?r.gifts.slice().reverse().map(g=>h('div',{class:'prow'},h('div',null,h('b',null,g.title),' · ',g.name,' · эфир ',g.event||'—',h('div',{class:'meta'},g.received?'✅ Получен '+g.receivedAt:'📦 Не получен')),
+        h('button',{class:'btn btn-soft btn-sm',onclick:async()=>{const v=await act('adminGiftReceived',{id:g.id,received:!g.received});if(v)refresh();}},g.received?'Отменить выдачу':'Отметить полученным'))):h('p',{class:'hint'},'Подарков пока нет'));
+    };
+    const player=h('input',{class:'input',placeholder:'Поиск игрока по имени или ссылке'}),suggestions=h('div'),title=h('input',{class:'input',placeholder:'Название подарка'}),event=h('input',{class:'input',placeholder:'Номер эфира',value:String(A.st.event.number)});let chosen=null;
+    const lookup=async()=>{if(!A.players){const r=await act('adminPlayers');if(!r)return;A.players=r.players;A.rules=r.rules;}
+      const q=norm(player.value.trim());fill(suggestions,q.length<2?null:A.players.filter(p=>norm(p.name).includes(q)||norm(p.url).includes(q)).slice(0,8).map(p=>h('button',{class:'btn btn-soft btn-block',onclick:()=>{chosen=p;player.value=p.name;fill(suggestions);}},p.name)));
+    };
+    player.addEventListener('input',()=>{chosen=null;lookup();});
+    const add=h('button',{class:'btn btn-primary btn-block',onclick:async()=>{if(!chosen){toast('Выберите игрока из подсказок','bad');return;}const r=await act('adminGiftAdd',{key:chosen.key,title:title.value,event:event.value});if(r){title.value='';refresh();toast('Подарок записан');}}},'Добавить подарок');
+    refresh();return h('section',{class:'card'},h('h2',null,'🎁 Учёт подарков'),h('p',{class:'hint'},'Каждый подарок — отдельная запись. Получение подтверждает администратор.'),player,suggestions,title,event,add,body);
+  }
+
   function playersView() {
     if (!A.players) {
       if (!A.pl) { A.pl = true; loadPlayers(); }
@@ -607,14 +607,16 @@
     }
     const q = h('input', { class: 'input', type: 'search', placeholder: 'Поиск по имени или ссылке', value: A.pq, autocomplete: 'off' });
     const listEl = h('div', { class: 'blist', style: { maxHeight: 'none' } });
+    const filters={miss:new Set([2]),frozen:false,zero:false,ex:false,win:false,sort:'name'};
+    const filtersEl=h('div',{class:'filters'},h('span',null,'Пропуски:'),...[0,1,2,3,4].map(n=>h('label',{class:'sw fl'},h('input',{type:'checkbox',checked:n===2,onchange:e=>{e.target.checked?filters.miss.add(n):filters.miss.delete(n);draw();}}),'❌'+n)),...[[ 'frozen','❄ Показывать замороженных'],['zero','Нулевой баланс'],['ex','Можно обменять'],['win','Победители']].map(([key,label])=>h('label',{class:'sw fl'},h('input',{type:'checkbox',onchange:e=>{filters[key]=e.target.checked;draw();}}),label)),h('select',{class:'input',onchange:e=>{filters.sort=e.target.value;draw();}},...[['name','По имени'],['balance','По балансу ↓'],['misses','По пропускам ↓'],['wins','По победам ↓'],['freezeTo','По сроку заморозки']].map(([v,label])=>h('option',{value:v},label))));
     const rules = A.rules || {};
     const draw = () => {
       const t = norm(A.pq.trim());
-      const rows = A.players.filter((p) => !t || norm(p.name).indexOf(t) >= 0 || norm(p.url).indexOf(t) >= 0);
+      const rows = A.players.filter(p=>(!t||norm(p.name).includes(t)||norm(p.url).includes(t))&&(filters.frozen||!p.frozen)&&(filters.zero||p.balance>0)&&(!filters.miss.size||filters.miss.has(Math.min(4,p.misses||0)))&&(!filters.ex||p.balance>=Number(rules.exchangeMin||30))&&(!filters.win||p.wins>0)).sort((a,b)=>filters.sort==='name'?norm(a.name).localeCompare(norm(b.name)):(Number(b[filters.sort]||0)-Number(a[filters.sort]||0)));
       fill(listEl, rows.length ? rows.map((p) => h('div', { class: 'prow', style: { cursor: 'pointer' }, onclick: () => openPlayer(p.key) },
         avatar(p.name, p.photo, 38),
-        h('div', { class: 'pname' }, h('b', null, p.name),
-          h('div', { class: 'chips' }, h('span', { class: 'bal' }, '🎟 ' + p.balance), crosses(p.misses), p.frozen ? h('span', { class: 'frz' }, '❄') : null,
+        h('div', { class: 'pname' }, h('b', {class:p.frozen?'frozen-name':''}, p.name),
+          h('div', { class: 'chips' }, h('span', { class: 'bal' }, '🎟 ' + p.balance), crosses(p.misses), p.frozen ? h('span', { class: 'frz snow-big',title:p.freezeTo?'До бесплатной разморозки '+Math.max(0,Math.ceil((p.freezeTo-Date.now())/86400000))+' дн.':'Старая бессрочная заморозка' }, '❄ '+(p.freezeTo?Math.max(0,Math.ceil((p.freezeTo-Date.now())/86400000))+' дн.':'∞')) : null,
             rules.exchangeMin && p.balance >= rules.exchangeMin ? h('span', { class: 'chip ex' }, '⭐ можно обменять') : null,
             p.wins ? h('span', { class: 'meta' }, '🏆 ' + p.wins) : null)))) : h('div', { class: 'empty' }, A.players.length ? 'Никого не нашли' : 'Игроков пока нет. Они появятся после первого завершённого эфира или добавьте вручную.'));
     };
@@ -627,7 +629,7 @@
           h('button', { class: 'btn btn-soft btn-sm', onclick: () => runImport(true) }, 'Импорт из таблицы: проверить'),
           h('button', { class: 'btn btn-soft btn-sm', onclick: () => runImport(false) }, 'Импорт из таблицы: загрузить')),
         h('p', { class: 'hint' }, 'Игроков: ' + A.players.length + '. Курс: 1 номерок = ' + (rules.rate || '—') + ' ₽, обмен от ' + (rules.exchangeMin || '—') + '. Импорт читает лист «Импорт» в таблице (ссылка ВК, имя, баланс, пропуски, заметка).'),
-        q, listEl));
+        q, filtersEl, listEl));
   }
 
   async function runImport(dry) {

@@ -330,3 +330,21 @@ button.pill { border: 0; font: inherit; cursor: pointer; }
 
 /* BOK v6.1: кабинет и открытка победителя */
 .cab-profile{display:flex;align-items:center;gap:15px;margin:18px 0}.cab-stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:16px 0}.cab-stats>div{padding:13px;background:var(--surface,#f5f1ed);border-radius:12px}.winner-preview{margin:16px 0}.winner-stage{position:relative;overflow:hidden;min-height:540px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:28px 18px;text-align:center;border-radius:20px;background:linear-gradient(135deg,#4e1748,#a33568);color:#fff}.winner-stage .avatar{border:6px solid #ffe5ac;box-sizing:content-box;max-width:40vw;max-height:40vw}.winner-stage h2{color:white;font-size:clamp(25px,5vw,42px);margin:0}.winner-kicker{font-weight:800;letter-spacing:2px;color:#ffe5ac}.winner-name{font-size:clamp(24px,4vw,38px);font-weight:800}.winner-number{font-size:clamp(60px,10vw,100px);font-weight:900;color:#ffe5ac}.winner-stage p{font-size:19px;white-space:pre-wrap}.winner-stage a{color:#fff}.winner-fireworks{font-size:26px;animation:confetti 1.8s ease-in-out infinite alternate}@keyframes confetti{from{transform:translateY(-8px) rotate(-7deg);opacity:.65}to{transform:translateY(12px) rotate(8deg);opacity:1}}@media(prefers-reduced-motion:reduce){.winner-fireworks{animation:none}}
+
+/* v6.2 — контрастная индикация заморозки и премиальная открытка */
+.snow-big,.frz{color:#1677da!important;font-size:22px!important;font-weight:900;filter:drop-shadow(0 1px 1px #b6dcff)}
+.frozen-name{color:#1677da!important;font-weight:800}.freeze-days{font-size:11px!important;color:#1677da;font-weight:800}
+.brow{grid-template-columns:minmax(0,1fr) 46px 34px 40px 48px 58px}
+.winner-stage{background:radial-gradient(ellipse at 50% 42%,#8b3657,#4a1b36 62%,#220f20);border:3px solid #d5a35f;outline:1px solid #9b684c;outline-offset:-12px;min-height:700px;padding:32px 24px;box-shadow:inset 0 0 100px #1c081988;gap:12px}
+.winner-stage .winner-brand{font-family:Georgia,serif;font-size:46px;letter-spacing:14px;color:#f7d7a1;line-height:1.1}
+.winner-brand small{display:block;font:11px system-ui,sans-serif;letter-spacing:4px;margin-top:9px}
+.winner-stage .winner-heading{font-family:Georgia,serif;font-size:clamp(30px,6vw,60px);line-height:1.1;color:#f6d9a5}
+.winner-heading em{display:block;font-size:.78em;font-weight:400;text-transform:none}
+.winner-portrait{width:min(74vw,290px);height:min(74vw,290px);display:flex;align-items:center;justify-content:center;border:6px solid #e8bd79;border-radius:50%;box-shadow:0 0 35px #d4a36d80;overflow:hidden}
+.winner-portrait .avatar{width:100%!important;height:100%!important;max-width:none!important;max-height:none!important;object-fit:cover;border:0!important;border-radius:50%}
+.winner-stage .winner-name{font:italic clamp(32px,6vw,55px) Georgia,serif;color:#fff0dc}
+.winner-stage .winner-number{font:700 clamp(74px,12vw,130px) Georgia,serif;color:#f7d59b}
+.winner-event,.winner-prize{color:#f8d7a4;font-weight:800;letter-spacing:2px}
+.winner-stage p{font-size:15px;max-width:580px;line-height:1.5}
+.winner-sparks{position:absolute;top:20%;left:0;right:0;pointer-events:none;color:#f7d7a1;letter-spacing:40px;animation:confetti 2s infinite alternate}
+.gift-item{padding:9px 12px;border-bottom:1px solid #e6dfd6}.live-suggestions{max-height:220px;overflow:auto}.winner-copy-preview{overflow-wrap:anywhere}
