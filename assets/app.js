@@ -320,7 +320,7 @@
     q.addEventListener('input',draw);
     const vkUrl = identity.url.toLowerCase().replace('vk.com/', 'vk.ru/');
     const known=players.find(p=>{
-      const url=String(p.url||'').toLowerCase().replace('vk.com/', 'vk.ru/').replace(/\\/$/,'');
+      const url=String(p.url||'').toLowerCase().replace('vk.com/', 'vk.ru/').replace(/\/$/,'');
       return url===vkUrl || url.endsWith('/id'+identity.id);
     });
     if (known) select(known);
