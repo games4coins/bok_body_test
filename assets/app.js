@@ -277,6 +277,22 @@
   // Публичный кабинет БЕЗ авторизации: только те сведения, которые уже видны всем в списке балансов.
   // Нельзя выдавать его за подтверждение владения аккаунтом или давать операции с балансом.
   async function openCabinet() {
+    const identity = window.BokVK && window.BokVK.profile();
+    if (!identity) {
+      const content = h('div', null,
+        h('p', { class: 'lead' }, 'Войдите через ВКонтакте, чтобы автоматически найти свой профиль участника.'),
+        h('div', { class: 'cab-vk-login' }),
+        h('p', { class: 'hint' }, 'Тестовый режим: пока отображаются только сведения из публичного списка балансов. Управление накоплениями через VK ID не включено.'));
+      openModal([h('h3', null, '🔐 Вход в кабинет ВОК'), content]);
+      const holder = content.querySelector('.cab-vk-login');
+      const error = h('p', { class: 'msg err', role: 'alert' });
+      content.appendChild(error);
+      if (!window.BokVK) { error.textContent = 'Модуль VK ID не загрузился. Обновите страницу.'; return; }
+      window.BokVK.mount(holder,
+        () => { closeModal(); openCabinet(); },
+        e => { error.textContent = 'Не удалось войти: ' + (e && e.message ? e.message : 'ошибка VK ID'); });
+      return;
+    }
     const box=h('div',null,h('p',{class:'lead'},'Загружаем публичные данные…'));
     openModal([h('h3',null,'👤 Кабинет участника (без авторизации)'),box]);
     const r=await api.balances();
@@ -302,9 +318,20 @@
     };
     const showSearch=()=>{q.value='';fill(box,h('p',{class:'lead'},'Публичные сведения. Вы можете просматривать карточки других участников.'),q,matches);draw();q.focus();};
     q.addEventListener('input',draw);
-    const previous=store('nomerok_cabinet')||store('nomerok_vk');
-    const known=players.find(p=>norm(p.url||'')===norm(previous||'')||norm(p.name)===norm(previous||''));
-    if(known)select(known);else showSearch();
+    const vkUrl = identity.url.toLowerCase().replace('vk.com/', 'vk.ru/');
+    const known=players.find(p=>{
+      const url=String(p.url||'').toLowerCase().replace('vk.com/', 'vk.ru/').replace(/\\/$/,'');
+      return url===vkUrl || url.endsWith('/id'+identity.id);
+    });
+    if (known) select(known);
+    else {
+      showSearch();
+      fill(box,
+        h('div', { class:'banner info' }, 'Вы вошли как ' + identity.name + ', но профиль с VK ID ' + identity.id + ' не найден в публичной базе. Проверьте, что ссылка на VK указана в карточке игрока.'),
+        q, matches);
+    }
+    const logout=h('button',{class:'btn btn-ghost btn-sm',style:{marginTop:'14px'},onclick:()=>{window.BokVK.logout();closeModal();openCabinet();}},'Выйти из VK ID');
+    box.appendChild(logout);
   }
 
   function renderPlayers() {
